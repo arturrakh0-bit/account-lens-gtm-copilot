@@ -26,6 +26,8 @@ Sales research tools often produce plausible recommendations without showing why
 6. Approve or hold the account after human review.
 7. Export decisions to CSV.
 
+The live demo opens with a 60-second guided workflow. A downloadable sample CSV and one-click demo reset make the full path repeatable for reviews and interviews.
+
 CSV imports require these columns: `name,domain,industry,employees,stage,location`. Imported rows are deliberately marked as unverified until a reviewer adds reliable evidence.
 
 Try the workflow with [`examples/accounts.csv`](examples/accounts.csv). The file contains fictional companies and reserved `.example` domains.
@@ -60,8 +62,8 @@ The deterministic demo score is capped at 100 points:
 | Market fit | 20 |
 | Growth stage | 15 |
 | GTM signals | 15 |
-| Operational readiness | 6 |
-| Evidence quality | 6 |
+| Operational readiness | 10 |
+| Evidence quality | 10 |
 | Risk penalty | -5 per flag |
 
 The score is intentionally simple and transparent. A production model would be calibrated against historical conversion data and reviewed for bias and data quality.
@@ -83,7 +85,7 @@ The project demonstrates ICP design, scoring logic, data modeling, evidence hand
 - CRM import and write-back;
 - real source citations with retrieval timestamps;
 - evaluation dataset and scoring calibration;
-- robust CSV validation and column mapping;
+- configurable CSV column mapping;
 - role-based access and durable audit history.
 
 ## Local development

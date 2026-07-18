@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type Company = {
   id: number;
@@ -151,14 +151,46 @@ function scoreCompany(c: Company, config: ICPConfig) {
     { label: "Market fit", points: focusFit ? (c.industry.includes("SaaS") ? 20 : 14) : 6 },
     { label: "Growth stage", points: ["Series A", "Series B"].includes(c.stage) ? 15 : c.stage === "Seed" ? 7 : 5 },
     { label: "GTM signals", points: Math.min(c.signals.length * 5, 15) },
-    { label: "Readiness", points: c.stack.some((x) => ["HubSpot", "Salesforce", "Pipedrive"].includes(x)) ? 6 : 2 },
-    { label: "Evidence quality", points: Math.min(c.evidence.length * 2, 6) },
+    { label: "Readiness", points: c.stack.some((x) => ["HubSpot", "Salesforce", "Pipedrive"].includes(x)) ? 10 : 2 },
+    { label: "Evidence quality", points: Math.min(c.evidence.length * 3, 10) },
     { label: "Risk penalty", points: c.risks.length * -5 },
   ];
   return { total: Math.max(0, Math.min(100, breakdown.reduce((sum, item) => sum + item.points, 0))), breakdown };
 }
 
 const scoreTone = (score: number) => (score >= 80 ? "high" : score >= 60 ? "medium" : "low");
+
+function parseCsvRows(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let value = "";
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === '"' && quoted && text[i + 1] === '"') {
+      value += '"';
+      i += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(value.trim());
+      value = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && text[i + 1] === "\n") i += 1;
+      row.push(value.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      value = "";
+    } else {
+      value += char;
+    }
+  }
+
+  row.push(value.trim());
+  if (row.some(Boolean)) rows.push(row);
+  return rows;
+}
 
 export default function Home() {
   const [companyData, setCompanyData] = useState(initialCompanies);
@@ -171,19 +203,13 @@ export default function Home() {
   const [csvError, setCsvError] = useState("");
   const [reviewed, setReviewed] = useState<Record<number, "approved" | "hold">>({});
   const [copied, setCopied] = useState(false);
-  const selected = companyData.find((c) => c.id === selectedId) ?? companyData[0];
-  const selectedScore = scoreCompany(selected, config);
-
+  const [showGuide, setShowGuide] = useState(true);
   const filtered = useMemo(
     () => companyData.filter((c) => `${c.name} ${c.industry} ${c.location}`.toLowerCase().includes(query.toLowerCase()) && scoreCompany(c, config).total >= threshold),
     [companyData, config, query, threshold],
   );
-
-  useEffect(() => {
-    if (filtered.length > 0 && !filtered.some((company) => company.id === selectedId)) {
-      setSelectedId(filtered[0].id);
-    }
-  }, [filtered, selectedId]);
+  const selected = filtered.find((company) => company.id === selectedId) ?? filtered[0] ?? companyData[0];
+  const selectedScore = scoreCompany(selected, config);
 
   const qualified = companyData.filter((c) => scoreCompany(c, config).total >= 60).length;
 
@@ -200,15 +226,14 @@ export default function Home() {
 
   async function previewCsv(file?: File) {
     if (!file) return;
-    const text = await file.text();
-    const lines = text.trim().split(/\r?\n/).filter(Boolean);
-    const headers = lines[0]?.split(",").map((value) => value.trim().toLowerCase().replaceAll('"', "")) ?? [];
+    const text = (await file.text()).replace(/^\uFEFF/, "");
+    const rows = parseCsvRows(text);
+    const headers = rows[0]?.map((value) => value.trim().toLowerCase()) ?? [];
     const required = ["name", "domain", "industry", "employees", "stage", "location"];
     if (!required.every((header) => headers.includes(header))) {
       setCsvError(`Required columns: ${required.join(", ")}`); setCsvPreview([]); return;
     }
-    const parsed = lines.slice(1, 11).map((line, index) => {
-      const values = line.split(",").map((value) => value.trim().replace(/^"|"$/g, ""));
+    const parsed = rows.slice(1, 11).map((values, index) => {
       const row = Object.fromEntries(headers.map((header, i) => [header, values[i] ?? ""]));
       const employees = Number.parseInt(row.employees, 10);
       return {
@@ -239,12 +264,27 @@ export default function Home() {
     setCompanyData([...initialCompanies, ...csvPreview]); setSelectedId(csvPreview[0].id); setThreshold(0); setCsvPreview([]);
   }
 
+  function resetDemo() {
+    setCompanyData(initialCompanies);
+    setSelectedId(1);
+    setQuery("");
+    setThreshold(60);
+    setConfig({ minEmployees: 30, maxEmployees: 200, focus: "software" });
+    setCsvPreview([]);
+    setCsvError("");
+    setReviewed({});
+    setShowConfig(false);
+    setShowGuide(true);
+  }
+
   return (
     <main>
       <header className="topbar">
         <div className="brand"><span className="brandmark">A</span><div><strong>Account Lens</strong><small>Evidence-first GTM copilot</small></div></div>
-        <div className="top-actions"><span className="demo-pill">Demo mode · no API</span><label className="secondary upload">Import CSV<input type="file" accept=".csv,text/csv" onChange={(event) => previewCsv(event.target.files?.[0])} /></label><button className="secondary" onClick={exportCsv}>Export CSV</button></div>
+        <div className="top-actions"><span className="demo-pill">Demo mode · no API</span><a className="secondary sample-link" href="/accounts.csv" download>Sample CSV</a><label className="secondary upload">Import CSV<input type="file" accept=".csv,text/csv" onChange={(event) => previewCsv(event.target.files?.[0])} /></label><button className="secondary" onClick={resetDemo}>Reset demo</button><button className="secondary" onClick={exportCsv}>Export CSV</button></div>
       </header>
+
+      {showGuide && <section className="demo-guide" aria-label="Guided product tour"><div><p className="eyebrow">60-SECOND PRODUCT TOUR</p><strong>Try the complete decision workflow</strong><span>Configure the ICP, inspect a score, make a review decision, then export the result.</span></div><ol><li><b>1</b>Adjust ICP</li><li><b>2</b>Open an account</li><li><b>3</b>Approve or hold</li><li><b>4</b>Export CSV</li></ol><button aria-label="Dismiss product tour" onClick={() => setShowGuide(false)}>×</button></section>}
 
       <section className="hero">
         <div><p className="eyebrow">RESEARCH → SCORE → REVIEW</p><h1>Turn a company list into a defensible shortlist.</h1><p>Every recommendation shows its evidence, scoring logic, uncertainty, and next best action. Nothing sends automatically.</p></div>
@@ -253,7 +293,7 @@ export default function Home() {
 
       <section className="icp-shell">
         <div className="icp-summary"><div><p className="eyebrow">ACTIVE ICP</p><strong>{config.focus === "saas" ? "B2B SaaS" : config.focus === "software" ? "B2B software" : "All industries"}</strong><span>{config.minEmployees}–{config.maxEmployees} employees · qualification at 60+ points</span></div><button className="secondary" onClick={() => setShowConfig(!showConfig)}>{showConfig ? "Close settings" : "Configure ICP"}</button></div>
-        {showConfig && <div className="icp-config"><label>Minimum employees<input type="number" min="1" value={config.minEmployees} onChange={(e) => setConfig({ ...config, minEmployees: Number(e.target.value) })} /></label><label>Maximum employees<input type="number" min="1" value={config.maxEmployees} onChange={(e) => setConfig({ ...config, maxEmployees: Number(e.target.value) })} /></label><label>Market focus<select value={config.focus} onChange={(e) => setConfig({ ...config, focus: e.target.value as ICPConfig["focus"] })}><option value="software">B2B software</option><option value="saas">B2B SaaS only</option><option value="all">All industries</option></select></label><div className="config-note"><strong>Scoring recalculates instantly.</strong><span>Size and market-fit points reflect this ICP; risk penalties remain visible.</span></div></div>}
+        {showConfig && <div className="icp-config"><label>Minimum employees<input type="number" min="1" max={config.maxEmployees} value={config.minEmployees} onChange={(e) => setConfig({ ...config, minEmployees: Math.max(1, Math.min(Number(e.target.value), config.maxEmployees)) })} /></label><label>Maximum employees<input type="number" min={config.minEmployees} value={config.maxEmployees} onChange={(e) => setConfig({ ...config, maxEmployees: Math.max(config.minEmployees, Number(e.target.value)) })} /></label><label>Market focus<select value={config.focus} onChange={(e) => setConfig({ ...config, focus: e.target.value as ICPConfig["focus"] })}><option value="software">B2B software</option><option value="saas">B2B SaaS only</option><option value="all">All industries</option></select></label><div className="config-note"><strong>Scoring recalculates instantly.</strong><span>Size and market-fit points reflect this ICP; risk penalties remain visible.</span></div></div>}
       </section>
 
       <section className="workspace">

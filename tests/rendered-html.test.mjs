@@ -25,6 +25,9 @@ test("server-renders the Account Lens application", async () => {
   assert.match(html, /Import CSV/);
   assert.match(html, /Export CSV/);
   assert.match(html, /Nothing sends automatically\./);
+  assert.match(html, /60-SECOND PRODUCT TOUR/);
+  assert.match(html, /Reset demo/);
+  assert.match(html, /Sample CSV/);
   assert.doesNotMatch(html, /codex-preview|Building your site|react-loading-skeleton/i);
 });
 
@@ -38,4 +41,5 @@ test("server-renders transparent scoring and human review controls", async () =>
   assert.match(html, /Hold/);
   assert.match(html, /Evidence/);
   assert.match(html, /Uncertainty/);
+  assert.match(html, /Approve or hold/);
 });
